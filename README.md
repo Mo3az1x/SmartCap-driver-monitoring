@@ -66,3 +66,5 @@ The first milestone is not yet a complete drowsiness detector.
 - Use participant codes instead of names.
 - Record experiments in `experiments/logs/`.
 - Use branches or pull requests for major changes.
+
+- aliaa
