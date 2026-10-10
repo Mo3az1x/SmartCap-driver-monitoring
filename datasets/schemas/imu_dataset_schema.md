@@ -1,98 +1,49 @@
-\# SmartCap IMU Dataset Schema
+# SmartCap IMU Dataset Schema
 
-
-
-\## Unit conventions
-
-
+## Unit conventions
 
 | Field | Unit | Description |
-
 |---|---|---|
+| ax_g, ay_g, az_g | g | Accelerometer axes |
+| gx_dps, gy_dps, gz_dps | degrees/s | Gyroscope axes |
+| pitch_deg | degrees | Relative head pitch after calibration |
+| roll_deg | degrees | Relative head roll after calibration |
+| pitch_velocity_dps | degrees/s | Smoothed pitch angular velocity |
+| head_down_duration_ms | ms | Time held in head-down state |
+| nodding_score | 0–1 | Decaying motion-pattern confidence |
+| motion_energy | normalized | Relative motion intensity |
+| imu_quality | 0–1 | Signal-health quality score |
 
-| ax\_g, ay\_g, az\_g | g | Accelerometer axes |
-
-| gx\_dps, gy\_dps, gz\_dps | degrees/s | Gyroscope axes |
-
-| pitch\_deg | degrees | Relative head pitch after calibration |
-
-| roll\_deg | degrees | Relative head roll after calibration |
-
-| pitch\_velocity\_dps | degrees/s | Smoothed pitch angular velocity |
-
-| head\_down\_duration\_ms | ms | Time held in head-down state |
-
-| nodding\_score | 0–1 | Decaying motion-pattern confidence |
-
-| motion\_energy | normalized | Relative motion intensity |
-
-| imu\_quality | 0–1 | Signal-health quality score |
-
-
-
-\## Labels
-
-
+## Labels
 
 ```text
-
 still
-
 normal
-
-look\_down
-
+look_down
 nod
-
-rapid\_turn
-
+rapid_turn
 ```
 
-
-
-\## File naming
-
-
+## File naming
 
 ```text
-
-PXX\_label\_optional-tag\_YYYYMMDD\_HHMMSS.csv
-
+PXX_label_optional-tag_YYYYMMDD_HHMMSS.csv
 ```
-
-
 
 Example:
 
-
-
 ```text
-
-P01\_nod\_trial1\_20261010\_224500.csv
-
+P01_nod_trial1_20261010_224500.csv
 ```
 
-
-
-\## Required metadata
-
-
+## Required metadata
 
 ```text
-
-participant\_id
-
+participant_id
 label
-
-device\_timestamp\_ms
-
-received\_timestamp\_ms
-
-hardware\_version
-
-firmware\_version
-
-calibration\_status
-
+device_timestamp_ms
+received_timestamp_ms
+hardware_version
+firmware_version
+calibration_status
 ```
-
