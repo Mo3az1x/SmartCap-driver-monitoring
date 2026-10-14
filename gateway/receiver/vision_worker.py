@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 SmartCap vision worker - reads the latest ESP32 camera frame from the gateway
 and extracts basic visual driver-state features.
@@ -90,6 +90,7 @@ def compute_mar(landmarks, w, h):
 
     if horizontal == 0:
         return 0.0
+
 
     return vertical / horizontal
 
@@ -361,7 +362,7 @@ def main():
 
     parser.add_argument(
         "--camera-url",
-        default="http://192.168.4.1:81/stream",
+        default="http://192.168.4.1/stream",
         help="ESP32 MJPEG stream URL",
     )
 

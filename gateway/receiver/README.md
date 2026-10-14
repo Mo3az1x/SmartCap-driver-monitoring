@@ -20,7 +20,7 @@ pip install -r requirements.txt
 
 \# IMU (Arduino over USB) + ESP32 camera
 
-python gateway\_receiver.py --port COM5 --camera-url http://192.168.4.1:81/stream --show
+python gateway\_receiver.py --port COM5 --camera-url http://192.168.4.1/stream --show
 
 
 
