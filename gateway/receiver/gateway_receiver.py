@@ -37,7 +37,7 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
-DEFAULT_CAMERA_URL = "http://192.168.4.1:81/stream"   # ESP32 soft-AP default IP; check the ESP32 Serial output
+DEFAULT_CAMERA_URL = "http://192.168.4.1/stream"   # ESP32 soft-AP default IP; check the ESP32 Serial output
 DEFAULT_BAUD = 230400                                  # must match the Arduino sketch (SERIAL_BAUD)
 
 IMU_REQUIRED = [

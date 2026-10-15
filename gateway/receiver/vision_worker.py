@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 SmartCap vision worker - reads the latest ESP32 camera frame from the gateway
 and extracts basic visual driver-state features.
