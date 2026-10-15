@@ -1,6 +1,4 @@
 pyserial>=3.5
 opencv-python
-opencv-python
-mediapipe
+mediapipe>=0.10
 numpy
-pyserial    
