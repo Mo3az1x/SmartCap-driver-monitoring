@@ -26,6 +26,26 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+<<<<<<< Updated upstream
+=======
+from mjpeg_client import iter_mjpeg_url
+
+MODEL_NAME = "face_landmarker.task"
+MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/face_landmarker/"
+             "face_landmarker/float16/1/face_landmarker.task")
+
+# MediaPipe face-mesh indices: (corner, corner, top1, bottom1, top2, bottom2)
+EYE_A = (33, 133, 159, 145, 160, 144)
+EYE_B = (362, 263, 386, 374, 385, 380)
+MOUTH_UP, MOUTH_LOW, MOUTH_L, MOUTH_R = 13, 14, 61, 291
+NOSE_TIP = 1
+OUTER_EYE_A, OUTER_EYE_B = 33, 263
+OVERLAY_POINTS = sorted(set(EYE_A + EYE_B + (MOUTH_UP, MOUTH_LOW, MOUTH_L, MOUTH_R)))
+
+# Same quality thresholds as the IMU firmware
+DEGRADED_BELOW = 0.70
+INVALID_BELOW = 0.30
+>>>>>>> Stashed changes
 
 # -----------------------------
 # Utility functions
