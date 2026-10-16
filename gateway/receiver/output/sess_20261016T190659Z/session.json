@@ -1,0 +1,29 @@
+{
+  "session_id": "sess_20261016T190659Z",
+  "created_utc": "2026-10-16T19:06:59.043206+00:00",
+  "profile": {
+    "id": "haptic",
+    "sketch": "firmware/imu_haptic/src/smartcap_imu_haptic/smartcap_imu_haptic.ino",
+    "baud": 230400,
+    "sample_hz": 50,
+    "output_hz": 25,
+    "notes": "Coin-motor PWM on D9. Default for gateway/receiver."
+  },
+  "baud": 230400,
+  "port": null,
+  "sim_imu": false,
+  "camera_url": "http://192.168.4.1/stream",
+  "video_path": null,
+  "vision_enabled": true,
+  "camera_client": "vision_worker.py",
+  "gateway_consumes_mjpeg": false,
+  "esp32_single_client": true,
+  "acquisition_only": false,
+  "duration_s": 0,
+  "imu_timeout_ms": 500,
+  "camera_timeout_s": 2.0,
+  "outdir": "D:\\Moaz\\SmartCap-driver-monitoring\\SmartCap-driver-monitoring\\gateway\\receiver\\output\\sess_20261016T190659Z",
+  "clock_note": "received_timestamp_ms is laptop Unix epoch ms. device_timestamp_ms IMU is Arduino millis(). device_timestamp_ms camera is ESP32 millis() when MJPEG headers are present. Clocks are not synchronized; do not treat differences as one-way latency.",
+  "sensing_vs_driver_state": "Child processes report source health (SENSING_OK / UNKNOWN). That is not ATTENTIVE.",
+  "firmware_demo_mode": "Arduino demoMode may vibrate from IMU-only heuristics until a vibration_command is received. That is not fused AI."
+}

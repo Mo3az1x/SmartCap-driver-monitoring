@@ -1,0 +1,15 @@
+{
+  "session_id": "sess_20261016T190659Z",
+  "stopped_utc": "2026-10-16T19:07:27.378369+00:00",
+  "components": [
+    {
+      "component": "imu",
+      "returncode": 1
+    },
+    {
+      "component": "vision",
+      "returncode": 1
+    }
+  ],
+  "sensing_note": "component return codes are process health, not ATTENTIVE/DROWSY"
+}
