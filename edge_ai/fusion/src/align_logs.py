@@ -74,25 +74,6 @@ def align_records(
     deltas = []
 
     imu_times = [(t, i) for t, i, _ in imu_indexed if t is not None]
-
-    def nearest_imu(t_vis: int) -> Optional[tuple[int, int]]:
-        # linear scan is fine for lab logs; keep it obvious
-        best = None
-        for t_imu, idx in imu_times:
-            if idx in used_imu:
-                continue
-            d = abs(t_imu - t_vis)
-            if d > tolerance_ms:
-                if best is not None and t_imu > t_vis + tolerance_ms:
-                    break
-                continue
-            if best is None or d < best[0] or (d == best[0] and t_imu <= t_vis):
-                best = (d, idx, t_imu)
-        if best is None:
-            return None
-        return best[1], best[2], best[0]
-
-    # Sort IMU times for early break
     imu_times.sort()
 
     for v_i, vrow in enumerate(vision_rows):
@@ -112,7 +93,6 @@ def align_records(
             unmatched_vision.append(v_i)
             aligned.append(record)
             continue
-        found = None
         best = None
         for t_imu, idx in imu_times:
             if idx in used_imu:

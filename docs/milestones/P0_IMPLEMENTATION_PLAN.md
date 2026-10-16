@@ -1,6 +1,6 @@
 # P0 Implementation Plan — Synchronized Multimodal Sensing Foundation
 
-Status: in progress (software). Physical hardware validation is a separate checklist and is **not** claimed here.
+Status: software foundation in progress. Hardware rows are in `P0_HARDWARE_CHECKLIST.md` and remain **NOT RUN** until someone executes them on the bench.
 
 Canonical integration path: `gateway/receiver/` (IMU serial + `vision_worker.py`).
 Legacy webcam scripts in `edge_ai/vision/src/` remain for lab bring-up; they are **not** the integration feature definitions.
