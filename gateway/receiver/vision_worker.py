@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python3
 """
-SmartCap vision worker - reads the ESP32 camera MJPEG stream (or a webcam) and extracts
-visual driver-state FEATURES with the MediaPipe Face Landmarker (Tasks API, VIDEO mode).
+SmartCap vision worker - reads the ESP32 camera MJPEG stream, laptop webcam, or recorded video files,
+and extracts visual driver-state FEATURES with the MediaPipe Face Landmarker (Tasks API, VIDEO mode).
 
 It does NOT decide that the driver is drowsy. It only produces behavioural cues:
   EAR / MAR, eye-closure duration, time-weighted PERCLOS (30 s), blink rate,
@@ -12,9 +12,7 @@ Important: NO_FACE is "unknown", never "eyes closed" and never "attentive".
 Run:
   python vision_worker.py --camera-url http://192.168.4.1/stream --show   # ESP32 (port 80!)
   python vision_worker.py --camera-url 0 --show                           # laptop webcam test
-
-The ESP32 stream accepts ONE client at a time: do not run this together with
-gateway_receiver.py or a browser tab that has the stream open.
+  python vision_worker.py --video-path demo_drowsy.mp4 --show             # DEMO_MODE video test
 """
 
 import argparse
@@ -86,23 +84,25 @@ def compute_mar(lm, w, h):
 
 
 def face_geometry(lm, w, h):
-    """(face_width_ratio, head_yaw_ratio). yaw ~0 = frontal, |yaw| > ~0.35 = head turned."""
+    """(face_width_ratio, head_yaw_ratio). Clipped between -1.0 and +1.0."""
     xa, xb = lm[OUTER_EYE_A].x, lm[OUTER_EYE_B].x
     span = abs(xb - xa)
     if span <= 1e-6:
         return 0.0, 0.0
     mid = (xa + xb) / 2.0
-    yaw = (lm[NOSE_TIP].x - mid) / (xb - xa)
+    raw_yaw = (lm[NOSE_TIP].x - mid) / (xb - xa)
+    # Fix yaw spikes by clipping values to [-1.0, 1.0]
+    yaw = max(-1.0, min(1.0, raw_yaw))
     return span, yaw
 
 
 # ======================= temporal trackers =======================
 
+# في EyeTracker داخل vision_worker.py:
+# قم بتعديل reopen_factor من 1.10 إلى 1.02 لتسريع الخروج من حالة إغلاق العين
 class EyeTracker:
-    """Eye closure state, time-weighted PERCLOS, blinks and long closures."""
-
-    def __init__(self, threshold=0.20, window_s=30.0, ema_alpha=0.5, prolonged_s=1.5,
-                 blink_min_s=0.05, blink_max_s=0.5, reopen_factor=1.10):
+    def __init__(self, threshold=0.18, window_s=30.0, ema_alpha=0.6, prolonged_s=1.5,
+                 blink_min_s=0.05, blink_max_s=0.5, reopen_factor=1.02):
         self.threshold = threshold
         self.window_s = window_s
         self.alpha = ema_alpha
@@ -127,13 +127,16 @@ class EyeTracker:
     def set_threshold(self, thr):
         self.threshold = float(thr)
 
-    def mark_no_face(self):
-        """Face lost: we cannot know the eye state. Reset the running closure only."""
+    def mark_no_face(self, no_face_duration=0.0):
+        """Face lost: clear current running closure."""
         self.closed = False
         self.closed_since = None
         self.closure_s = 0.0
         self.last_t = None
         self.ear_s = None
+        # If face lost for long duration (>2s), flush stale samples
+        if no_face_duration > 2.0:
+            self.samples.clear()
 
     def update(self, ear, t):
         self.ear_s = ear if self.ear_s is None else self.ear_s + self.alpha * (ear - self.ear_s)
@@ -218,7 +221,7 @@ class YawnTracker:
 class EarCalibrator:
     """Personal open-eye EAR from the first N face frames (eyes assumed open)."""
 
-    def __init__(self, frames=60, ratio=0.72, lo=0.12, hi=0.26):
+    def __init__(self, frames=60, ratio=0.72, lo=0.12, hi=0.21):
         self.frames, self.ratio, self.lo, self.hi = frames, ratio, lo, hi
         self.restart()
 
@@ -304,11 +307,12 @@ def write_json_atomic(path, obj):
 
 
 class FrameGrabber(threading.Thread):
-    """Reads the stream in its own thread and keeps ONLY the newest frame (no growing lag)."""
+    """Reads stream/webcam/video in its own thread and keeps ONLY the newest frame."""
 
-    def __init__(self, source):
+    def __init__(self, source, is_video_file=False):
         super().__init__(daemon=True)
         self.source = source
+        self.is_video_file = is_video_file
         self.lock = threading.Lock()
         self.frame, self.frame_id, self.frame_t = None, 0, 0.0
         self.status = "CONNECTING"
@@ -340,10 +344,17 @@ class FrameGrabber(threading.Thread):
             while not self.stop_flag.is_set():
                 ok, frame = cap.read()
                 if not ok or frame is None:
-                    break
+                    if self.is_video_file:
+                        # Loop video files seamlessly for DEMO_MODE
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        continue
+                    else:
+                        break
                 with self.lock:
                     self.frame, self.frame_t = frame, time.time()
                     self.frame_id += 1
+                if self.is_video_file:
+                    time.sleep(0.033)  # Emulate 30 FPS playback speed
             cap.release()
             self.status = "DISCONNECTED"
             self.reconnects += 1
@@ -465,16 +476,23 @@ class VisionWorker:
              "processing_fps": self.fps, "pts": []}
 
         if not result.face_landmarks:
-            self.eyes.mark_no_face()
-            self.yawn.reset()
             if self.no_face_since is None:
                 self.no_face_since = t
+            no_face_duration = t - self.no_face_since
+            self.eyes.mark_no_face(no_face_duration)
+            self.yawn.reset()
+
             s.update(face_detected=False, ear=0.0, mar=0.0, head_yaw_ratio=0.0, face_width_ratio=0.0,
-                     no_face_duration_s=t - self.no_face_since, vision_quality=0.0,
+                     no_face_duration_s=no_face_duration, vision_quality=0.0,
                      vision_status="NO_FACE", ear_threshold=self.eyes.threshold,
                      **self.eyes.snapshot(t), **self._yawn_snapshot())
             s["eye_state"] = "UNKNOWN"
             return s
+
+        # Auto-recalibrate if face returns after prolonged absence (>5s)
+        if self.no_face_since is not None and (t - self.no_face_since) > 5.0 and self.calib is not None:
+            self.calib.restart()
+            self.eyes.reset_all()
 
         self.no_face_since = None
         lm = result.face_landmarks[0]
@@ -517,7 +535,10 @@ class VisionWorker:
             if isinstance(v, float):
                 row[k] = round(v, 4)
         self.log.write(row)
-        if self.latest_path and time.time() - self.last_json_t >= 0.1:
+        
+        # Immediate export upon prolonged closure/yawn trigger
+        urgent_event = s.get("prolonged_eye_closure") or s.get("prolonged_yawn")
+        if self.latest_path and (urgent_event or (time.time() - self.last_json_t >= 0.1)):
             self.last_json_t = time.time()
             out = {k: (round(v, 4) if isinstance(v, float) else v) for k, v in s.items() if k != "pts"}
             out["type"] = "vision_features"
@@ -573,9 +594,17 @@ class VisionWorker:
     # ---- main loop ----
     def run(self):
         self._create_landmarker()
-        src = self.args.camera_url
-        source = int(src) if str(src).isdigit() else src
-        grabber = FrameGrabber(source)
+        
+        # Support DEMO_MODE via recorded video files
+        is_video_file = False
+        if self.args.video_path:
+            src = self.args.video_path
+            is_video_file = True
+        else:
+            src = self.args.camera_url
+            src = int(src) if str(src).isdigit() else src
+
+        grabber = FrameGrabber(src, is_video_file=is_video_file)
         grabber.start()
         print(f"Vision worker started: {src}")
         print(f"Model: {self.model_path}")
@@ -589,7 +618,6 @@ class VisionWorker:
             while True:
                 frame, last_id_new, ft = grabber.get(last_id)
                 if frame is None:
-                    # no new frame: report camera trouble if it lasts
                     if ft > 0:
                         self.last_frame_wall = ft
                     age = time.time() - (self.last_frame_wall or 0)
@@ -638,6 +666,7 @@ def build_parser():
     p = argparse.ArgumentParser(description="SmartCap vision worker")
     p.add_argument("--camera-url", default="http://192.168.4.1/stream",
                    help="ESP32 MJPEG stream URL (port 80), or a webcam index like 0")
+    p.add_argument("--video-path", default=None, help="path to a recorded video file for DEMO_MODE testing")
     p.add_argument("--model", default=None, help="path to face_landmarker.task (auto-searched/downloaded)")
     p.add_argument("--no-download", action="store_true", help="do not auto-download the model")
     p.add_argument("--show", action="store_true", help="live preview window (q/ESC quit, c recalibrate)")
