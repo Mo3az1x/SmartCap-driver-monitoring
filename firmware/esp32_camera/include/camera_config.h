@@ -21,4 +21,4 @@
 // Settings you will change during the tests
 #define CAM_FRAME_SIZE   FRAMESIZE_VGA   // QVGA=320x240, VGA=640x480, SVGA=800x600
 #define CAM_JPEG_QUALITY 12              // 10 best quality, 63 worst
-#define CAM_XCLK_HZ      20000000        // try 10000000 too
+#define CAM_XCLK_HZ     10000000        // try 10000000 too

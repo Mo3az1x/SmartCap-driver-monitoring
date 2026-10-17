@@ -9,7 +9,7 @@ following `protocol/SMARTCAP_INTERFACE_SPEC_v1.md`.
 pip install -r requirements.txt
 
 # IMU (Arduino over USB) + ESP32 camera
-python gateway_receiver.py --port COM5 --camera-url http://192.168.4.1:81/stream --show
+python gateway_receiver.py --port COM5 --camera-url http://192.168.4.1/stream --show
 
 # IMU only
 python gateway_receiver.py --port COM5 --no-camera

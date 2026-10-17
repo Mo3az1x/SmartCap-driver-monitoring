@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 SmartCap gateway receiver - first integration milestone.
 
@@ -19,7 +19,7 @@ Only metadata is logged.
 
 Examples:
     python gateway_receiver.py --port COM5
-    python gateway_receiver.py --port COM5 --camera-url http://192.168.4.1:81/stream --show
+    python gateway_receiver.py --port COM5 --camera-url http://192.168.4.1/stream --show
     python gateway_receiver.py --no-camera --port COM5
     python gateway_receiver.py --sim-imu --no-camera --duration 10     # no hardware needed
 
@@ -37,7 +37,7 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
-DEFAULT_CAMERA_URL = "http://192.168.4.1:81/stream"   # ESP32 soft-AP default IP; check the ESP32 Serial output
+DEFAULT_CAMERA_URL = "http://192.168.4.1/stream"   # ESP32 soft-AP default IP; check the ESP32 Serial output
 DEFAULT_BAUD = 230400                                  # must match the Arduino sketch (SERIAL_BAUD)
 
 IMU_REQUIRED = [
