@@ -30,7 +30,7 @@
 #define SAMPLE_HZ        50
 #define SAMPLE_US        (1000000UL / SAMPLE_HZ)
 #define OUTPUT_DIV       5          // one message every 5th sample (10 Hz) - keeps Serial from blocking the loop
-#define SERIAL_BAUD      115200UL
+#define SERIAL_BAUD        230400UL
 #define MPU_ADDR         0x68       // AD0 -> GND
 #define MPU_DLPF_CFG     0
 #define PITCH_SIGN       1.0f
