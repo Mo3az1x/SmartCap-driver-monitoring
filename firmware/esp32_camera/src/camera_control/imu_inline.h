@@ -549,7 +549,9 @@ static void imuMakeJson(char *buffer, size_t capacity, const char *deviceId) {
   bool fresh = sample.valid && age <= IMU_STALE_MS;
 
   uint8_t state = imuState;
-  if (!fresh && imuReady) state = 4;
+  // Keep CALIBRATING visible even though no calibrated sample exists yet.
+  if (calibrationState == 1 && imuReady) state = 1;
+  else if (!fresh && imuReady) state = 4;
   if (!imuReady) state = 5;
 
   if (fresh) {
