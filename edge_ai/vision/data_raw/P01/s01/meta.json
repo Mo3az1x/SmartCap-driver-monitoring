@@ -1,0 +1,13 @@
+{
+  "subject": "P01",
+  "session": "s01",
+  "url": "http://192.168.4.1/stream",
+  "lighting": "normal",
+  "glasses": 0,
+  "placement": "cap",
+  "interval": 0.2,
+  "skip": 1.5,
+  "out": "D:\\SmartCap-driver-monitoring\\edge_ai\\vision\\data_raw",
+  "model": "D:\\SmartCap-driver-monitoring\\edge_ai\\vision\\models\\face_landmarker.task",
+  "date": "2026-11-10T10:11:25"
+}

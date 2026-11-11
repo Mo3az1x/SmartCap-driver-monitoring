@@ -1,0 +1,13 @@
+{
+    "subject": "P02",
+    "session": "test01",
+    "lighting": "normal",
+    "glasses": "0",
+    "placement": "cap",
+    "camera_url": "http://192.168.4.1/stream",
+    "camera_rotation": 180,
+    "image_size": "64x64",
+    "label_method": "manual_keyboard_selection",
+    "ear_threshold": 0.2,
+    "created_at": "2026-11-11T17:39:13.267296"
+}
