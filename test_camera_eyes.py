@@ -25,6 +25,14 @@ MODEL_PATH = (
 
 CAMERA_URL = "http://192.168.4.1/stream"
 
+# Camera rotation:
+# 180 = upside down camera
+# 90 clockwise = ROTATE_90_CLOCKWISE
+# 90 counterclockwise = ROTATE_90_COUNTERCLOCKWISE
+
+CAMERA_ROTATION = cv2.ROTATE_180
+
+
 if not MODEL_PATH.exists():
     raise FileNotFoundError(
         f"Face Landmarker model not found: {MODEL_PATH}"
@@ -67,7 +75,7 @@ landmarker = vision.FaceLandmarker.create_from_options(options)
 
 
 # ==========================================
-# 4. Helper: draw eye bounding box
+# 4. Draw eye bounding box
 # ==========================================
 
 def draw_eye_box(frame, landmarks, indexes, label):
@@ -89,7 +97,6 @@ def draw_eye_box(frame, landmarks, indexes, label):
     x_max = np.max(points[:, 0])
     y_max = np.max(points[:, 1])
 
-    # Add padding around the eye
     padding_x = max(5, int((x_max - x_min) * 0.35))
     padding_y = max(5, int((y_max - y_min) * 0.70))
 
@@ -118,7 +125,7 @@ def draw_eye_box(frame, landmarks, indexes, label):
 
 
 # ==========================================
-# 5. Connect to ESP32 camera
+# 5. Connect to ESP32-S3 CAM
 # ==========================================
 
 print("[INFO] Connecting to ESP32-S3 CAM...")
@@ -133,6 +140,7 @@ if not cap.isOpened():
 
 print("[SUCCESS] Camera connected!")
 print("[INFO] Waiting for face detection...")
+print("[INFO] Press Q to exit.")
 
 
 # ==========================================
@@ -143,6 +151,7 @@ start_time = time.monotonic()
 frame_count = 0
 
 try:
+
     while True:
 
         ret, frame = cap.read()
@@ -151,6 +160,9 @@ try:
             print("[WARNING] Frame read failed.")
             time.sleep(0.1)
             continue
+
+        # Rotate frame BEFORE MediaPipe processing
+        frame = cv2.rotate(frame, CAMERA_ROTATION)
 
         frame_count += 1
 
@@ -196,6 +208,7 @@ try:
             color = (0, 255, 0)
 
         else:
+
             status = "NO FACE DETECTED"
             color = (0, 0, 255)
 
@@ -218,6 +231,7 @@ try:
             break
 
 finally:
+
     cap.release()
     landmarker.close()
     cv2.destroyAllWindows()
