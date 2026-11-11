@@ -237,9 +237,9 @@ venv/
 *.mkv
 *.jpg
 *.jpeg
-*.png
+
 *.wav
-*.csv
+
 
 # Model files
 *.pt
