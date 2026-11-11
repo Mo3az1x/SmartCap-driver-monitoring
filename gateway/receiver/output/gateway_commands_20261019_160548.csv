@@ -1,0 +1,2 @@
+type,command_id,timestamp_ms,level,duration_ms,reason,sent_ok
+vibration_command,1,1792415212058,0,0,MANUAL_TEST,True
