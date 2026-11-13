@@ -1,0 +1,24 @@
+========== ANN ORIGINAL VS ROI ==========
+
+Total frames: 858
+Detected frames: 381
+Missed frames: 477
+Invalid ROI frames: 0
+Face detection rate: 44.41%
+
+========== ORIGINAL PREDICTIONS ==========
+Alert: 0 (0.00%)
+Yawning: 381 (100.00%)
+Microsleep: 0 (0.00%)
+
+========== ROI PREDICTIONS ==========
+Alert: 294 (77.17%)
+Yawning: 87 (22.83%)
+Microsleep: 0 (0.00%)
+
+========== COMPARISON ==========
+Original vs ROI agreement: 87/381 (22.83%)
+
+ROI padding: 15%
+
+No temporal smoothing or thresholds applied.

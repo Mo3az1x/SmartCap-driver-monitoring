@@ -1,0 +1,13 @@
+========== LANDMARK ANN TEST ==========
+
+Total frames: 858
+Detected frames: 381
+Missed frames: 477
+Face detection rate: 44.41%
+
+Prediction distribution:
+Alert: 0 (0.00%)
+Yawning: 381 (100.00%)
+Microsleep: 0 (0.00%)
+
+No temporal smoothing or thresholds applied.

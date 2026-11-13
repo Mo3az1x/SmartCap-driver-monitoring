@@ -1,0 +1,20 @@
+MobileNetV2 SmartCap Video Test
+========================================
+Total video frames: 858
+Processed frames: 858
+FPS: 15.00
+Yawning threshold: 0.8
+
+Raw predictions before threshold:
+Alert: 487 (56.76%)
+Yawning: 162 (18.88%)
+Microsleep: 209 (24.36%)
+
+Final predictions after threshold:
+Alert: 596 (69.46%), average confidence: 64.86%
+Yawning: 22 (2.56%), average confidence: 86.25%
+Microsleep: 240 (27.97%), average confidence: 66.83%
+
+Rejected Yawning frames: 140
+Output video: C:\Users\Alia\OneDrive\Documents\GitHub\SmartCap-driver-monitoring\edge_ai\vision\src\smartcap_ai\output\cnn_test\mobilenetv2_predictions.mp4
+Output CSV: C:\Users\Alia\OneDrive\Documents\GitHub\SmartCap-driver-monitoring\edge_ai\vision\src\smartcap_ai\output\cnn_test\mobilenetv2_predictions.csv
