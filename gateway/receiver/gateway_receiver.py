@@ -40,9 +40,19 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+<<<<<<< Updated upstream
 
 DEFAULT_IMU_URL = "http://192.168.4.1/imu"
 DEFAULT_CAMERA_URL = "http://192.168.4.1/stream"
+=======
+try:
+    import serial
+except ImportError:  # pyserial might not be installed in the current environment
+    serial = None
+
+DEFAULT_CAMERA_URL = "http://192.168.4.1:81/stream"   # ESP32 soft-AP default IP; check the ESP32 Serial output
+DEFAULT_BAUD = 230400                                  # must match the Arduino sketch (SERIAL_BAUD)
+>>>>>>> Stashed changes
 
 IMU_REQUIRED = [
     "type",
