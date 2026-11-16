@@ -29,10 +29,20 @@ EYE_MODEL_PATH = (
 )
 
 THRESHOLD = 0.40
+IMAGE_SIZE = 64
 
+# Camera is physically upside down
 CAMERA_ROTATION = cv2.ROTATE_180
 
-IMAGE_SIZE = 64
+LEFT_EYE = [
+    33, 133, 160, 159, 158, 157,
+    173, 144, 145, 153, 154, 155
+]
+
+RIGHT_EYE = [
+    362, 263, 387, 386, 385, 384,
+    398, 373, 374, 380, 381, 382
+]
 
 
 # ==========================================
@@ -46,7 +56,7 @@ if not FACE_MODEL_PATH.exists():
 
 if not EYE_MODEL_PATH.exists():
     raise FileNotFoundError(
-        f"Eye AI model not found: {EYE_MODEL_PATH}"
+        f"Eye model not found: {EYE_MODEL_PATH}"
     )
 
 
@@ -62,26 +72,15 @@ eye_model = tf.keras.models.load_model(
 )
 
 print("[SUCCESS] V4 model loaded!")
+print("[INFO] Input shape:", eye_model.input_shape)
+print("[INFO] Output shape:", eye_model.output_shape)
 
 
 # ==========================================
-# 4. MediaPipe eye landmarks
+# 4. Initialize MediaPipe
 # ==========================================
 
-LEFT_EYE = [
-    33, 133, 160, 159, 158, 157,
-    173, 144, 145, 153, 154, 155
-]
-
-RIGHT_EYE = [
-    362, 263, 387, 386, 385, 384,
-    398, 373, 374, 380, 381, 382
-]
-
-
-# ==========================================
-# 5. Create Face Landmarker
-# ==========================================
+print("[INFO] Loading MediaPipe FaceLandmarker...")
 
 base_options = python.BaseOptions(
     model_asset_path=str(FACE_MODEL_PATH)
@@ -90,51 +89,54 @@ base_options = python.BaseOptions(
 options = vision.FaceLandmarkerOptions(
     base_options=base_options,
     running_mode=vision.RunningMode.VIDEO,
-    num_faces=1,
-    min_face_detection_confidence=0.5,
-    min_face_presence_confidence=0.5,
-    min_tracking_confidence=0.5
+    num_faces=1
 )
 
 landmarker = vision.FaceLandmarker.create_from_options(
     options
 )
 
+print("[SUCCESS] MediaPipe loaded!")
+
 
 # ==========================================
-# 6. Extract eye image
+# 5. Extract eye crop
 # ==========================================
 
-def extract_eye(frame, landmarks, indexes):
+def extract_eye(frame, landmarks, indices):
 
     height, width = frame.shape[:2]
 
-    points = []
+    x_values = [
+        int(landmarks[i].x * width)
+        for i in indices
+    ]
 
-    for index in indexes:
-        x = int(landmarks[index].x * width)
-        y = int(landmarks[index].y * height)
+    y_values = [
+        int(landmarks[i].y * height)
+        for i in indices
+    ]
 
-        points.append((x, y))
+    x_min = min(x_values)
+    x_max = max(x_values)
 
-    points = np.array(points)
+    y_min = min(y_values)
+    y_max = max(y_values)
 
-    x_min = np.min(points[:, 0])
-    y_min = np.min(points[:, 1])
-    x_max = np.max(points[:, 0])
-    y_max = np.max(points[:, 1])
+    eye_width = x_max - x_min
+    eye_height = y_max - y_min
 
-    padding_x = max(5, int((x_max - x_min) * 0.35))
-    padding_y = max(5, int((y_max - y_min) * 0.70))
-
-    x1 = max(0, x_min - padding_x)
-    y1 = max(0, y_min - padding_y)
-
-    x2 = min(width, x_max + padding_x)
-    y2 = min(height, y_max + padding_y)
-
-    if x2 <= x1 or y2 <= y1:
+    if eye_width < 2 or eye_height < 2:
         return None, None
+
+    pad_x = int(eye_width * 0.35)
+    pad_y = int(eye_height * 0.60)
+
+    x1 = max(0, x_min - pad_x)
+    y1 = max(0, y_min - pad_y)
+
+    x2 = min(width, x_max + pad_x)
+    y2 = min(height, y_max + pad_y)
 
     eye_crop = frame[y1:y2, x1:x2]
 
@@ -145,47 +147,61 @@ def extract_eye(frame, landmarks, indexes):
 
 
 # ==========================================
-# 7. Predict eye state using V4
+# 6. V4 AI prediction
 # ==========================================
 
 def predict_eye(eye_crop):
 
-    # Convert BGR to grayscale
     gray = cv2.cvtColor(
         eye_crop,
         cv2.COLOR_BGR2GRAY
     )
 
-    # Resize to model input size
     resized = cv2.resize(
         gray,
         (IMAGE_SIZE, IMAGE_SIZE)
     )
 
-    # Normalize pixels to [0, 1]
-    normalized = resized.astype("float32") / 255.0
-
-    # Shape: (1, 64, 64, 1)
-    model_input = normalized[np.newaxis, :, :, np.newaxis]
-
-    # Model output = probability of CLOSED
-    probability_closed = float(
-        eye_model.predict(model_input, verbose=0)[0][0]
+    normalized = (
+        resized.astype("float32") / 255.0
     )
 
-    if probability_closed >= THRESHOLD:
-        state = "CLOSED"
-    else:
-        state = "OPEN"
+    input_data = normalized.reshape(
+        1, IMAGE_SIZE, IMAGE_SIZE, 1
+    )
+
+    prediction = eye_model.predict(
+        input_data,
+        verbose=0
+    )
+
+    probability_closed = float(
+        np.asarray(prediction).reshape(-1)[0]
+    )
+
+    state = (
+        "CLOSED"
+        if probability_closed >= THRESHOLD
+        else "OPEN"
+    )
 
     return state, probability_closed
 
 
 # ==========================================
-# 8. Draw prediction on frame
+# 7. Draw AI prediction
 # ==========================================
 
-def draw_prediction(frame, box, state, probability, label):
+def draw_prediction(
+    frame,
+    box,
+    label,
+    state,
+    probability
+):
+
+    if box is None:
+        return
 
     x1, y1, x2, y2 = box
 
@@ -207,55 +223,111 @@ def draw_prediction(frame, box, state, probability, label):
         f"({probability * 100:.1f}%)"
     )
 
+    text_y = max(25, y1 - 10)
+
     cv2.putText(
         frame,
         text,
-        (x1, max(20, y1 - 10)),
+        (x1, text_y),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.5,
+        0.55,
         color,
         2
     )
 
 
 # ==========================================
-# 9. Connect to ESP32-S3 CAM
+# 8. Connect to ESP32-S3 CAM
 # ==========================================
 
-print("[INFO] Connecting to ESP32-S3 CAM...")
+def connect_camera():
 
-cap = cv2.VideoCapture(CAMERA_URL)
+    print("[INFO] Connecting to ESP32-S3 CAM...")
 
-if not cap.isOpened():
-    landmarker.close()
-    raise RuntimeError(
-        "Cannot connect to ESP32-S3 CAM. Check Wi-Fi and URL."
+    cap = cv2.VideoCapture(
+        CAMERA_URL,
+        cv2.CAP_FFMPEG
     )
 
-print("[SUCCESS] Camera connected!")
-print("[INFO] V4 eye detection started.")
-print("[INFO] Press Q to exit.")
+    cap.set(
+        cv2.CAP_PROP_BUFFERSIZE,
+        1
+    )
+
+    if not cap.isOpened():
+
+        print("[WARNING] FFmpeg connection failed.")
+        print("[INFO] Trying default backend...")
+
+        cap.release()
+
+        cap = cv2.VideoCapture(CAMERA_URL)
+
+    if not cap.isOpened():
+
+        cap.release()
+
+        raise RuntimeError(
+            "Cannot connect to ESP32-S3 CAM."
+        )
+
+    print("[SUCCESS] Camera connection opened!")
+
+    for attempt in range(20):
+
+        ret, frame = cap.read()
+
+        if ret and frame is not None:
+
+            print(
+                "[SUCCESS] Camera frame received:",
+                frame.shape
+            )
+
+            return cap
+
+        print(
+            f"[INFO] Waiting for frame "
+            f"{attempt + 1}/20"
+        )
+
+        time.sleep(0.2)
+
+    cap.release()
+
+    raise RuntimeError(
+        "Camera connected but no frame received."
+    )
 
 
 # ==========================================
-# 10. Real-time processing
+# 9. Main AI processing
 # ==========================================
 
-start_time = time.monotonic()
-frame_count = 0
+cap = None
 
 try:
+
+    cap = connect_camera()
+
+    print("[INFO] SmartCap V4 AI started!")
+    print("[INFO] Press Q to exit.")
+
+    start_time = time.monotonic()
+    last_timestamp_ms = -1
+    frame_count = 0
 
     while True:
 
         ret, frame = cap.read()
 
-        if not ret:
-            print("[WARNING] Failed to read camera frame.")
+        if not ret or frame is None:
+
+            print("[WARNING] Failed to read frame.")
             time.sleep(0.1)
             continue
 
-        # Correct camera orientation
+        # Rotate camera
         frame = cv2.rotate(
             frame,
             CAMERA_ROTATION
@@ -263,21 +335,31 @@ try:
 
         frame_count += 1
 
-        # Convert frame to RGB for MediaPipe
+        # MediaPipe timestamp
+        timestamp_ms = int(
+            (time.monotonic() - start_time) * 1000
+        )
+
+        timestamp_ms = max(
+            timestamp_ms,
+            last_timestamp_ms + 1
+        )
+
+        last_timestamp_ms = timestamp_ms
+
+        # Convert BGR to RGB
         rgb_frame = cv2.cvtColor(
             frame,
             cv2.COLOR_BGR2RGB
         )
 
+        # Correct MediaPipe Image constructor
         mp_image = mp.Image(
             image_format=mp.ImageFormat.SRGB,
             data=rgb_frame
         )
 
-        timestamp_ms = int(
-            (time.monotonic() - start_time) * 1000
-        )
-
+        # Face detection
         result = landmarker.detect_for_video(
             mp_image,
             timestamp_ms
@@ -287,76 +369,113 @@ try:
 
             landmarks = result.face_landmarks[0]
 
-            eye_configs = [
-                ("LEFT EYE", LEFT_EYE),
-                ("RIGHT EYE", RIGHT_EYE)
-            ]
+            # Extract eyes
+            left_crop, left_box = extract_eye(
+                frame,
+                landmarks,
+                LEFT_EYE
+            )
 
-            for label, indexes in eye_configs:
+            right_crop, right_box = extract_eye(
+                frame,
+                landmarks,
+                RIGHT_EYE
+            )
 
-                eye_crop, box = extract_eye(
-                    frame,
-                    landmarks,
-                    indexes
-                )
+            # LEFT EYE AI
+            if left_crop is not None:
 
-                if eye_crop is None:
-                    continue
-
-                state, probability = predict_eye(
-                    eye_crop
+                left_state, left_probability = predict_eye(
+                    left_crop
                 )
 
                 draw_prediction(
                     frame,
-                    box,
-                    state,
-                    probability,
-                    label
+                    left_box,
+                    "LEFT EYE",
+                    left_state,
+                    left_probability
                 )
 
-            status = "FACE DETECTED"
-            status_color = (0, 255, 0)
+            # RIGHT EYE AI
+            if right_crop is not None:
+
+                right_state, right_probability = predict_eye(
+                    right_crop
+                )
+
+                draw_prediction(
+                    frame,
+                    right_box,
+                    "RIGHT EYE",
+                    right_state,
+                    right_probability
+                )
+
+            cv2.putText(
+                frame,
+                "FACE DETECTED | V4 AI ACTIVE",
+                (15, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 255, 0),
+                2
+            )
 
         else:
 
-            status = "NO FACE DETECTED"
-            status_color = (0, 0, 255)
+            cv2.putText(
+                frame,
+                "NO FACE DETECTED",
+                (15, 35),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 0, 255),
+                2
+            )
 
-        # Display system status
-        cv2.putText(
-            frame,
-            status,
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            status_color,
-            2
+        # FPS
+        elapsed = time.monotonic() - start_time
+
+        fps = (
+            frame_count / elapsed
+            if elapsed > 0
+            else 0
         )
 
         cv2.putText(
             frame,
-            f"V4 Threshold: {THRESHOLD}",
-            (10, 60),
+            f"FPS: {fps:.1f}",
+            (15, frame.shape[0] - 20),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
             (255, 255, 0),
             2
         )
 
+        # Show live AI output
         cv2.imshow(
-            "SmartCap - V4 AI Eye Detection",
+            "SmartCap V4 - Live Eye AI",
             frame
         )
 
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == ord("q"):
             break
+
+
+except KeyboardInterrupt:
+
+    print("\n[INFO] Stopped by user.")
 
 finally:
 
-    cap.release()
+    if cap is not None:
+        cap.release()
+
     landmarker.close()
+
     cv2.destroyAllWindows()
 
-    print("[INFO] SmartCap V4 test stopped.")
-    print("[INFO] Total frames:", frame_count)
+    print("[INFO] SmartCap V4 test finished.")
