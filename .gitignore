@@ -235,8 +235,7 @@ venv/
 *.avi
 *.mov
 *.mkv
-*.jpg
-*.jpeg
+
 
 *.wav
 
