@@ -3,10 +3,10 @@ import time
 
 
 def main():
-    camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    camera = cv2.VideoCapture(1, cv2.CAP_DSHOW)
 
     if not camera.isOpened():
-        raise RuntimeError("Could not open webcam. Try changing camera index 0 to 1.")
+        raise RuntimeError("Could not open webcam. Try changing camera index 1 to 0.")
 
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
