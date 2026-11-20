@@ -127,6 +127,10 @@ def to_tensor(xb_uint8, device):
     return torch.from_numpy(xb_uint8).to(device).float().div_(255.0)
 
 
+# geometric augmentation strength (changed by train_img.py --aug-scale / --aug-shift)
+AUG = {"scale": (0.8, 1.2), "shift": 0.2}      # scale range of the zoom; shift = full range of the translation
+
+
 def augment(x):
     """Batch augmentation, training only: flip, zoom / rotate / shift, gamma + brightness + contrast,
     colour cast, light noise. Makes the model less picky about camera, framing and lighting."""
@@ -136,10 +140,11 @@ def augment(x):
     n, dev = x.shape[0], x.device
     flip = torch.rand(n, device=dev) < 0.5
     x = torch.where(flip[:, None, None, None], x.flip(3), x)
-    s = 0.8 + torch.rand(n, device=dev) * 0.4                         # <1 zooms in, >1 zooms out
+    lo, hi = AUG["scale"]
+    s = lo + torch.rand(n, device=dev) * (hi - lo)                   # <1 zooms in, >1 zooms out
     ang = (torch.rand(n, device=dev) - 0.5) * 2 * math.radians(8)
-    tx = (torch.rand(n, device=dev) - 0.5) * 0.2
-    ty = (torch.rand(n, device=dev) - 0.5) * 0.2
+    tx = (torch.rand(n, device=dev) - 0.5) * AUG["shift"]
+    ty = (torch.rand(n, device=dev) - 0.5) * AUG["shift"]
     c, sn = torch.cos(ang) * s, torch.sin(ang) * s
     theta = torch.stack([torch.stack([c, -sn, tx], 1), torch.stack([sn, c, ty], 1)], 1)
     x = F.grid_sample(x, F.affine_grid(theta, list(x.shape), align_corners=False),

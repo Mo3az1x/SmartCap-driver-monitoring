@@ -235,10 +235,17 @@ def main():
     p.add_argument("--holdout", nargs="*", default=[],
                    help="folders with images of ANOTHER person. Never trained on; accuracy is reported at the end")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--aug-scale", type=float, nargs=2, default=[0.8, 1.2], metavar=("LO", "HI"),
+                   help="random zoom range of the augmentation (default 0.8 1.2; try 0.65 1.5 for more framing robustness)")
+    p.add_argument("--aug-shift", type=float, default=0.2,
+                   help="full range of the random shift in normalised coordinates (default 0.2; try 0.4)")
     p.add_argument("--out", default=str(ROOT / "reports" / "img"))
     p.add_argument("--models", default=str(ROOT / "models"))
     args = p.parse_args()
 
+    im.AUG["scale"] = tuple(args.aug_scale)
+    im.AUG["shift"] = args.aug_shift
+    print(f"augmentation: zoom {im.AUG['scale']}, shift {im.AUG['shift']}")
     print("Loading images ...")
     t0 = time.perf_counter()
     X, y, classes, X_paths = im.load_folder(args.data, args.img, args.gray, max_per_class=args.max_per_class, seed=args.seed)
