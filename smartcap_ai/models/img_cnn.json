@@ -1,0 +1,10 @@
+{
+ "arch": "cnn",
+ "img": 64,
+ "gray": false,
+ "classes": [
+  "alert",
+  "microsleep",
+  "yawning"
+ ]
+}

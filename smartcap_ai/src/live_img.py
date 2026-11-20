@@ -12,6 +12,10 @@ Rules (starting values, tune with the team):
   alert                          -> ATTENTIVE
   yawning                        -> DROWSINESS_SUSPECTED
   microsleep (eyes closed)       -> DROWSINESS_SUSPECTED, and HIGH_RISK after it lasts >= 2 s
+ACCURACY OF THE LIVE DEMO (you tell it the true state while you act it out):
+    python src/live_img.py --model models/img_cnn.pt --camera 1 --eval
+    keys: 1 = alert, 2 = microsleep (eyes closed), 3 = yawning, 0 = pause (not counted), q = finish + report
+    -> reports/live_eval/live_eval.md (+ csv, confusion png): per-frame accuracy, state accuracy, UNKNOWN rate, latency
 Press q / ESC to quit. Research prototype, not a medical or certified safety system.
 """
 import argparse
@@ -120,6 +124,101 @@ class StateMachine:
         return self._msg("ATTENTIVE", risk, conf, [], pd)
 
 
+class LiveEval:
+    """Counts how often the live output matches the state YOU said you were acting out."""
+
+    def __init__(self, classes, settle_s=1.0):
+        self.classes, self.settle_s = classes, settle_s
+        n = len(classes)
+        self.cm = np.zeros((n, n), dtype=int)            # rows: true, columns: raw CNN prediction (per frame)
+        self.state_ok = np.zeros(n, dtype=int)
+        self.state_n = np.zeros(n, dtype=int)
+        self.unknown = np.zeros(n, dtype=int)
+        self.no_face = 0
+        self.ms = []
+        self.rows = []
+        self.label, self.label_t = None, 0.0
+        low = [c.lower() for c in classes]
+        self.expected = [{"ATTENTIVE"} if "alert" in c else {"DROWSINESS_SUSPECTED", "HIGH_RISK"} for c in low]
+
+    def set_label(self, idx, now):
+        if idx != self.label:
+            self.label, self.label_t = idx, now
+
+    def add(self, now, probs, msg, ms):
+        if self.label is None or now - self.label_t < self.settle_s:      # paused / just changed: not counted
+            return
+        if probs is None:
+            self.no_face += 1
+            return
+        k = self.label
+        pred = int(probs.argmax())
+        self.cm[k, pred] += 1
+        self.state_n[k] += 1
+        self.state_ok[k] += msg["state"] in self.expected[k]
+        self.unknown[k] += msg["state"] == "UNKNOWN"
+        self.ms.append(ms)
+        self.rows.append((round(now, 2), self.classes[k], self.classes[pred], msg["state"], msg["confidence"]))
+
+    def report(self, out_dir):
+        import csv
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        n = int(self.cm.sum())
+        if n == 0:
+            print("Eval: no labelled frames were counted (press 1/2/3 and keep your face in view).")
+            return
+        frame_acc = np.trace(self.cm) / n
+        state_acc = self.state_ok.sum() / max(self.state_n.sum(), 1)
+        lines = ["# Live evaluation (CNN)", "",
+                 f"- Labelled frames counted: {n} (frames in the first {self.settle_s:.1f} s after each key press, "
+                 f"paused frames and no-face frames [{self.no_face}] are not counted)",
+                 f"- **Per-frame accuracy** (raw CNN, no smoothing): **{frame_acc*100:.1f}%**",
+                 f"- **State accuracy** (after smoothing + rules; UNKNOWN counts as wrong): **{state_acc*100:.1f}%**",
+                 f"- UNKNOWN rate: {self.unknown.sum() / max(self.state_n.sum(), 1) * 100:.1f}%",
+                 f"- Time per frame (face crop -> CNN -> state, this machine): mean {np.mean(self.ms):.1f} ms, "
+                 f"p95 {np.percentile(self.ms, 95):.1f} ms", "",
+                 "| true state | frames | per-frame acc | state acc | UNKNOWN |", "|---|---|---|---|---|"]
+        for i, c in enumerate(self.classes):
+            t = int(self.cm[i].sum())
+            if t:
+                lines.append(f"| {c} | {t} | {self.cm[i, i] / t * 100:.1f}% | "
+                             f"{self.state_ok[i] / max(self.state_n[i], 1) * 100:.1f}% | "
+                             f"{self.unknown[i] / max(self.state_n[i], 1) * 100:.1f}% |")
+        lines += ["", "Confusion matrix (rows: what you acted, columns: what the CNN said, per frame):", "",
+                  "| true \\ predicted | " + " | ".join(self.classes) + " |", "|---" * (len(self.classes) + 1) + "|"]
+        for i, c in enumerate(self.classes):
+            lines.append(f"| {c} | " + " | ".join(str(v) for v in self.cm[i]) + " |")
+        lines += ["", "Honest notes: you are the only subject, the labels are what you *meant* to act (a half-closed eye "
+                      "while labelled 'alert' counts as an error), and neighbouring frames are almost identical, so treat "
+                      "this as a demo check, not a final benchmark."]
+        (out / "live_eval.md").write_text("\n".join(lines), encoding="utf-8")
+        with open(out / "live_eval_frames.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["t_s", "true", "raw_pred", "state", "confidence"])
+            w.writerows(self.rows)
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            fig, a = plt.subplots(figsize=(1.2 * len(self.classes) + 3, 1.2 * len(self.classes) + 2.5))
+            a.imshow(self.cm, cmap="Blues")
+            a.set(xticks=range(len(self.classes)), yticks=range(len(self.classes)), xticklabels=self.classes,
+                  yticklabels=self.classes, xlabel="CNN said", ylabel="you acted",
+                  title=f"Live per-frame accuracy {frame_acc*100:.1f}%")
+            for i in range(len(self.classes)):
+                for j in range(len(self.classes)):
+                    a.text(j, i, int(self.cm[i, j]), ha="center", va="center",
+                           color="white" if self.cm[i, j] > self.cm.max() / 2 else "black")
+            fig.tight_layout()
+            fig.savefig(out / "live_eval_confusion.png", dpi=130)
+            plt.close(fig)
+        except Exception:
+            pass
+        print("\n".join(lines))
+        print(f"\nSaved in {out}")
+
+
 def draw(frame, msg, box, fps):
     import cv2
     h, w = frame.shape[:2]
@@ -156,12 +255,17 @@ def main():
     p.add_argument("--microsleep-s", type=float, default=2.0, help="eyes closed this long -> HIGH_RISK")
     p.add_argument("--log", default=None, help="append driver_state JSON lines (no images)")
     p.add_argument("--no-show", action="store_true")
+    p.add_argument("--eval", action="store_true", help="live accuracy: press 1/2/3 to tell it the true state")
+    p.add_argument("--settle", type=float, default=1.0,
+                   help="--eval: ignore this many seconds after each key press (you are still changing pose)")
+    p.add_argument("--eval-out", default=str(Path(__file__).resolve().parents[1] / "reports" / "live_eval"))
     args = p.parse_args()
 
     pred = Predictor(args.model)
     sm = StateMachine(pred.classes, args.ema, args.min_conf, args.microsleep_s)
     log = open(args.log, "a", encoding="utf-8") if args.log else None
     last_print = [0.0]
+    ev = LiveEval(pred.classes, args.settle) if args.eval else None
 
     def handle(msg, t):
         if t - last_print[0] >= 1.0:
@@ -180,9 +284,17 @@ def main():
         for f in files:
             frame = cv2.imdecode(np.fromfile(str(f), dtype=np.uint8), cv2.IMREAD_COLOR)
             t += 0.33
-            msg = sm.update(pred(frame), t)
+            t0 = time.perf_counter()
+            probs = pred(frame)
+            msg = sm.update(probs, t)
+            ms = (time.perf_counter() - t0) * 1000
+            if ev is not None and f.parent.name in pred.classes:        # folder name = true label
+                ev.set_label(pred.classes.index(f.parent.name), t)
+                ev.add(t, probs, msg, ms)
             last_print[0] = -1e9
             handle(msg, t)
+        if ev is not None:
+            ev.report(args.eval_out)
         return
 
     import cv2
@@ -197,6 +309,7 @@ def main():
             if not ok:
                 print("Failed to read a frame.")
                 break
+            t0 = time.perf_counter()
             box = detect(frame)
             probs = None
             if box is not None:
@@ -204,19 +317,37 @@ def main():
                 probs = pred(frame[y:y + h, x:x + w])
             now = time.time()
             msg = sm.update(probs, now)
+            ms = (time.perf_counter() - t0) * 1000
+            if ev is not None:
+                ev.add(now, probs, msg, ms)
             fps = 0.9 * fps + 0.1 / max(now - t_prev, 1e-3)
             t_prev = now
             handle(msg, now)
             if not args.no_show:
                 draw(frame, msg, box, fps)
+                if ev is not None:
+                    names = " ".join(f"{i + 1}={c}" for i, c in enumerate(pred.classes))
+                    cur = "PAUSED" if ev.label is None else pred.classes[ev.label]
+                    cv2.putText(frame, f"EVAL acting: {cur}   counted: {int(ev.cm.sum())}", (12, frame.shape[0] - 36),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2)
+                    cv2.putText(frame, f"{names}  0=pause  q=report", (12, frame.shape[0] - 12),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 cv2.imshow("SmartCap - driver state (image CNN)", frame)
-                if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+                key = cv2.waitKey(1) & 0xFF
+                if key in (ord("q"), 27):
                     break
+                if ev is not None:
+                    if key == ord("0"):
+                        ev.set_label(None, now)
+                    elif ord("1") <= key < ord("1") + len(pred.classes):
+                        ev.set_label(key - ord("1"), now)
     finally:
         cap.release()
         cv2.destroyAllWindows()
         if log:
             log.close()
+        if ev is not None:
+            ev.report(args.eval_out)
 
 
 if __name__ == "__main__":

@@ -1,128 +1,128 @@
-# SmartCap AI – laptop version (vision only)
+# SmartCap AI - driver state from the camera (laptop version)
 
-Prototype of the AI part of SmartCap. It runs on the **laptop webcam + laptop screen** first; the same code is meant to move to the Raspberry Pi later.
-This folder is **separate from the repo** – nothing in `smartcap-driver-monitoring` was changed.
+AI part of the SmartCap graduation project. It runs on the **laptop webcam and laptop screen**.
+The same code is meant to move to the Raspberry Pi and the cap's ESP32-S3 camera later (see "Next steps").
+This folder is **separate from the team repo**: nothing in `edge_ai/` or `gateway/` was changed.
 
-## الفكرة ببساطة
+## Final result (what is in this project)
 
-```
-Webcam → MediaPipe (pretrained, نقط الوش) → numbers per frame (EAR, MAR, head pose)
-       → window 10 s → 21 features → RandomForest (بيتدرّب على تسجيلاتك) → driver_state
-```
+The main model is an **image CNN** that looks at a cropped face and classifies it as
+`alert`, `microsleep` (closed eyes) or `yawning`. A small ANN is trained next to it for comparison.
+Face crop: MediaPipe. Training data: public FL3D dataset (53,331 frames).
 
-- الـ **MediaPipe** موديل جاهز مش بنتدرّبه. اللي بنتدرّبه هو الـ classifier الصغير اللي بيقرر الحالة من سلوك آخر 10 ثواني.
-- التصنيف: `attentive` / `distracted` / `drowsy` (تمثيل فقط). الـ `UNKNOWN` **قواعد ثابتة مش موديل**: مفيش وش، أول 10 ثواني، أو الموديل مش واثق → UNKNOWN، عمره ما يبقى ATTENTIVE.
-- بيطلّع رسالة `driver_state` زي الـ spec (القسم 10). الـ `imu_quality` = `null` لأن الـ IMU لسه مش مدمج.
-- مفيش فيديو ولا صور بتتخزّن – أرقام بس (قسم 14 في الـ spec).
+| Check | CNN | ANN |
+|---|---|---|
+| Validation on FL3D (split **by video**, 10,418 images) | 97.27% | 89.01% |
+| Parameters | 583,267 | 6,441,475 |
+| My own laptop-camera images (`reports/img_test`) | 97.4% | 63.9% |
+| Live demo, per frame (`reports/live_eval`) | 97.3% | - |
+| Live demo, state after smoothing + rules (UNKNOWN counts as wrong) | 96.3% | - |
+| Live pipeline time (face crop + CNN + state), laptop | about 30 ms / frame | - |
+
+The CNN is clearly better than the ANN: it uses about 10x fewer parameters and generalises to a different camera.
+The ANN fails on a different camera and lighting (microsleep recall 0% on my images).
+
+### Honest limits (write these in the report)
+
+- All own-image and live tests use **one face and one camera** (the developer's), and the drowsiness is **acted**, not real.
+  The numbers show the model works, not that it is ready for any driver in a car.
+- The best epoch is picked on the validation set itself, so the 97.27% is slightly optimistic
+  (last-epoch validation accuracy is about 95% for the CNN and 87% for the ANN).
+- FL3D folders are video ids, not person ids, so the same driver may appear in several videos.
+- `ms / image` in `reports/img/img_compare.md` was measured on the GPU with batch size 1; it is dominated by overhead and is
+  not a fair speed comparison. Use the live pipeline time (about 30 ms / frame) instead.
+- The model was trained and tested on the **laptop camera**. It has not been tested on the cap's ESP32 camera; expect lower accuracy there.
+- Research prototype, not a medical or certified safety system.
+
+## Folder contents
+
+| Path | What it is |
+|---|---|
+| `SmartCap_Images_ANN_CNN.ipynb` | Notebook: prepare data, train ANN and CNN, compare, test on own images |
+| `src/train_img.py`, `src/imgmodels.py` | Training code for the ANN and CNN |
+| `src/prepare_dataset.py` | Organises FL3D into `dataset_prepared/<class>/*.jpg` (reads the JSON labels, split-by-video names) |
+| `src/capture_images.py` | Capture your own labelled face images from the camera |
+| `src/test_img.py` | Test both models on your own images |
+| `src/live_img.py` | **Live demo** (camera -> face -> CNN -> state), optional `--eval` mode |
+| `src/export_img_onnx.py` | Export the CNN to ONNX (`onnxruntime` only, no torch needed) |
+| `src/collect.py`, `src/train.py`, `src/train_dl.py`, `src/live.py`, `src/engine.py`, `src/windowing.py`, `src/landmarks.py` | Earlier landmark-based pipeline (EAR/MAR/head pose over 10 s windows -> RandomForest or 1D-CNN+GRU) |
+| `models/` | Trained image models: `img_cnn.pt`, `img_cnn.onnx` + `img_cnn.json` (keep together), `img_ann.pt`, MediaPipe `face_landmarker.task` |
+| `reports/img`, `reports/img_test`, `reports/live_eval`, `reports/compare_samples.png` | Results for the report |
+| `reports/synthetic_pipeline_check/` | Reports from **fake data** that only prove the code runs. Do not quote them. |
+| `my_images/` | The developer's own labelled face images (305 images). Remove before sharing publicly. |
+| `data/raw/` | One landmark recording (P01), numbers only |
+| `tests/test_pipeline.py`, `tools/make_synthetic_data.py` | Camera-free tests on fake data |
+
+**Not included** (too large, and ignored by git): the FL3D images (`dataset_prepared`, about 620 MB), the Python virtual environments,
+and the trained landmark-based models (`driver_state_*.onnx/.joblib`). You can recreate them with the steps below.
 
 ## Setup (Windows)
 
 ```powershell
 cd smartcap_ai
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m venv .venv313
+.venv313\Scripts\python.exe -m pip install -r requirements-dl.txt
 ```
 
-## 1) Record data  (مرة لكل شخص)
+If PowerShell blocks activation scripts, do not activate the venv: call `.venv313\Scripts\python.exe` directly (as below).
+For an NVIDIA GPU install the CUDA build of torch from https://pytorch.org/get-started/locally (training also works on CPU, only slower).
+
+## Run the live demo
 
 ```powershell
-python src/collect.py --participant P01
+.venv313\Scripts\python.exe src\live_img.py --model models\img_cnn.pt --camera 1
+.venv313\Scripts\python.exe src\live_img.py --model models\img_cnn.pt --camera 1 --eval   # measures accuracy, writes reports/live_eval
 ```
 
-Keys: `1` attentive · `2` distracted · `3` drowsy (**simulated**) · `0` pause · `q` quit
+`--camera` accepts a number (0 or 1 = USB/laptop camera; try the other if you get the rear camera), `esp32`, an IP address, or a full URL.
+No video or image is stored by the live demo. `UNKNOWN` is a fixed rule (no face, warm-up, or low confidence), never `ATTENTIVE`.
 
-| Key | Do |
-|---|---|
-| 1 attentive | بص قدامك كأنك سايق، رمش عادي |
-| 2 distracted | بص يمين/شمال/تحت (بعيد عن الطريق) كل كام ثانية |
-| 3 drowsy | رمش بطيء، اقفل عينيك 1–3 ثواني، تثاؤب، خلّي راسك تنزل |
+## Retrain the image models
 
-- الهدف: **3 دقايق على الأقل لكل label، ولأكتر من شخص** (3+ أشخاص يفضّل). الموديل الحقيقي بيتحدد بالداتا دي.
-- اتنوّع: إضاءة مختلفة، بنظارة/بدون، مسافات مختلفة عن الكاميرا.
-- قواعد الـ spec: موافقة مكتوبة، تمثيل نعاس بس (ممنوع حرمان من النوم)، تجربة في معمل/عربية واقفة، أكواد مجهولة (P01, P02…).
-
-## 2) Train
+1. Download FL3D: https://www.kaggle.com/datasets/matjazmuc/frame-level-driver-drowsiness-detection-fl3d (or let the notebook use `kagglehub`).
+2. Open `SmartCap_Images_ANN_CNN.ipynb` in VS Code, select the `.venv313` kernel, and run the cells in order.
+   Or from a terminal:
 
 ```powershell
-python src/train.py
+.venv313\Scripts\python.exe src\prepare_dataset.py --src "<path to FL3D>" --dst dataset_prepared
+.venv313\Scripts\python.exe src\train_img.py --data dataset_prepared
+.venv313\Scripts\python.exe src\capture_images.py --participant P01 --classes alert microsleep yawning --camera 1
+.venv313\Scripts\python.exe src\test_img.py --images my_images --models models\img_cnn.pt models\img_ann.pt
 ```
 
-Writes `models/driver_state_model.joblib` and `reports/train_report.md` (accuracy, confusion matrix, أهم features).
-مع شخصين أو أكتر التقييم **subject-independent** (الشخص المُختبَر عمره ما يبقى في التدريب). مع شخص واحد الأرقام متفائلة وهيقولك كده.
+Capture keys: `1` alert, `2` microsleep, `3` yawning, `0` pause, `q` quit. Record about 100 images per class under different lighting and poses.
+Recordings need written consent and only **acted** drowsiness (no sleep deprivation), as the interface spec requires.
 
-## 3) Live demo
+## Earlier landmark-based pipeline (optional)
+
+```
+Webcam -> MediaPipe (pretrained) -> EAR, MAR, head pose per frame -> 10 s window -> RandomForest or 1D-CNN+GRU -> driver_state
+```
 
 ```powershell
-python src/live.py
-python src/live.py --log reports/live_log.jsonl     # بيكتب driver_state JSON كمان
+.venv313\Scripts\python.exe src\collect.py --participant P01 --camera 1
+.venv313\Scripts\python.exe src\train.py
+.venv313\Scripts\python.exe src\train_dl.py --arch large --epochs 30 --seeds 2
+.venv313\Scripts\python.exe src\live.py --model models\driver_state_dl_large.onnx --camera 1
 ```
 
-أول ~10 ثواني UNKNOWN (warm-up). `q` للخروج.
-
-## 4) Deep learning model (1D-CNN + GRU) – نفس الداتا، موديل تاني
-
-مفيش تسجيل جديد. بعد ما تسجّل (الخطوة 1) شغّل:
-
-```powershell
-.venv\Scripts\python.exe -m pip install -r requirements-dl.txt
-.venv\Scripts\python.exe src\train_dl.py
-.venv\Scripts\python.exe src\live.py --model models\driver_state_dl.onnx --camera 1
-```
-
-- بياخد **التسلسل الخام** لآخر 10 ثواني (100 خطوة × 5 قنوات: EAR, MAR, yaw, pitch, roll) بدل الـ 21 رقم الملخّصين. الـ CNN بيلقط أنماط قصيرة (رمشة، تثاؤب، لفّة راس) والـ GRU بيفهم ترتيبها في الوقت. حوالي 13 ألف parameter.
-- بيتدرّب جنب الـ RandomForest على **نفس الـ folds** وبيطلّع المقارنة في `reports/train_dl_report.md`. لو الـ DL مش أحسن، **قولها كده في التقرير** – مع داتا قليلة (كام شخص / كام دقيقة) الـ RandomForest كتير بيكسب. الـ DL بيبدأ يفرق لما الداتا تكبر.
-- الناتج `models/driver_state_dl.onnx` ملف واحد + `.json` جنبه (لازم الاتنين مع بعض). بيشتغل بـ `onnxruntime` بس، يعني خفيف على الـ Raspberry Pi، والـ torch بيتحتاج للتدريب بس.
-- الـ `live.py` والـ engine نفس القواعد: مفيش وش / warm-up / ثقة قليلة = UNKNOWN.
-
-## 5) الموديل الكبير على Colab (GPU)
-
-افتح `SmartCap_Colab_Training.ipynb` في Colab، اختار `Runtime ▸ Change runtime type ▸ T4 GPU`، وشغّل الخلايا بالترتيب. هتحتاج تـ upload ملفين: `smartcap_ai.zip` و`data_raw.zip` (فولدر `data\raw` بتاعك متضغوط).
-
-- `python src/train_dl.py --arch large --epochs 80 --seeds 5` هو اللي الـ notebook بيشغّله: ResNet-1D + BiGRU + attention (~650 ألف parameter)، augmentation أقوى، و**ensemble من 5 seeds** (بيتوسّط احتمالاتهم). بيطلّع `models/driver_state_dl_large.onnx` + `.json` (لازم الاتنين مع بعض) و`reports/train_dl_large_report.md`.
-- على اللابتوب: `python src\live.py --model models\driver_state_dl_large.onnx --camera 1`. الـ inference ~2 ms لكل window على CPU عادي (قياسي هنا)، فمفيش مشكلة على Pi.
-- **الأهم:** الموديل الكبير لوحده مش بيضمن دقة أحسن. مع داتا قليلة ممكن يحفظها ويبقى أسوأ من الـ RandomForest على ناس جديدة. الـ report بيقارنهم بصدق على أشخاص مش في التدريب. اللي بيرفع الجودة فعلاً: **ناس أكتر**، إضاءات وزوايا أكتر، وتسجيل أطول.
-
-## 6) كاميرا الكاب (ESP32-S3) بدل كاميرا اللابتوب
-
-1. شغّل الـ ESP32 (firmware `camera_stream`) ووصّل اللابتوب بشبكة الواي فاي **`SmartCap-CAM`** (الباسورد في الـ firmware). اللابتوب هيفقد النت طول ما هو متوصل بيها.
-2. افتح `http://192.168.4.1/` في المتصفح وتأكد إن الصورة شغالة، وبعدين **اقفل التاب** (الـ ESP32 بيخدم client واحد بس على `/stream`).
-3. سجّل داتا جديدة في فولدر منفصل:
-
-```powershell
-.venv313\Scripts\python.exe src\collect.py --participant P01 --camera esp32 --outdir data\raw_cap
-.venv313\Scripts\python.exe src\live.py --model models\driver_state_dl_large.onnx --camera esp32
-```
-
-- `--camera` بيقبل: رقم (0/1 = كاميرا USB)، أو `esp32`، أو IP (`192.168.4.1`)، أو URL كامل.
-- لو بطيء: `http://192.168.4.1/control?var=framesize&val=5` (QVGA) أو `val=8` (VGA) في المتصفح، وبعدين اقفله.
-- **الموديل المتدرّب على كاميرا اللابتوب مش هيشتغل كويس على كاميرا الكاب** (زاوية وعدسة وجودة مختلفة). لازم تسجّل داتا جديدة بكاميرا الكاب وتتدرّب عليها (`data_raw.zip` من `data\raw_cap`)، ومتخلطهمش.
-
-## 7) موديلات الصور: ANN و CNN (من VS Code)
-
-افتح `SmartCap_Images_ANN_CNN.ipynb` في VS Code، اختار kernel `.venv313`، وشغّل الخلايا بالترتيب: تنزيل FL3D ← `prepare_dataset.py` ← تقسيم 80/20 ← تدريب ANN وCNN (loss / accuracy / وقت كل epoch) ← مقارنة ← test على صورك (`capture_images.py` + `test_img.py`).
-نفس الحاجات متاحة من الـ terminal: `python src/train_img.py --data dataset` و `python src/test_img.py --images my_images --models models/img_cnn.pt models/img_ann.pt`.
-الصور بتتحفظ على جهازك بس (`my_images`, `dataset`) ومتترفعش على git.
+On the single-person recording (515 windows) the large deep model and the RandomForest reached about 0.96 and 0.94, but that evaluation
+is **not subject-independent** (blocks of the same person), so it is optimistic. Recording more people is what would improve it.
+`risk_score = P(drowsy) + 0.4 * P(distracted)` and the `HIGH_RISK` cutoff of 0.85 are starting choices to tune with the team.
 
 ## Test without a camera
 
 ```powershell
-python tests/test_pipeline.py
+.venv313\Scripts\python.exe tests\test_pipeline.py
 ```
 
-بيستخدم داتا **مزيفة** (`tools/make_synthetic_data.py`) عشان يتأكد إن الـ pipeline شغال. الدقة العالية هناك معناها صفر عن السواقين الحقيقيين. **متحطّهاش في `data/raw/`.**
-
-## Honest limits
-
-- Tested here: landmark maths, training (RandomForest and CNN+GRU, ONNX export checked against PyTorch), engine rules (UNKNOWN cases), MediaPipe API call on a blank frame, replay mode.
-  **Not tested:** a real webcam with a real face (no camera access in my environment) – first real run is on your laptop.
-- Thresholds (`closed_ratio`, `mar_open`, `turn_yaw` in `src/windowing.py`) are starting values; the EAR/head-pitch baseline is rolling over 60 s, so a very long drowsy stretch can pull it down.
-- Head pose is a cheap 2D estimate, not a calibrated one. It does **not** mean "looking away from the road" (spec section 9).
-- `risk_score = P(drowsy) + 0.4·P(distracted)` and the `HIGH_RISK` cutoff at 0.85 are my starting choices – tune with the team.
-- Research prototype, not a medical or certified safety system.
+Uses **fake** data (`tools/make_synthetic_data.py`) only to check that the code runs. Do not put fake data in `data/raw/`.
 
 ## Next steps
 
-1. **Raspberry Pi:** same code (camera opens with the default backend on Linux, `CAP_DSHOW` is Windows-only). Then export the model to ONNX/TFLite if speed needs it.
-2. **IMU fusion:** add `pitch_deg`, `nodding_score`, `head_down_duration_ms` as extra features in the same window.
-3. **If you move this into the repo:** `.gitignore` there ignores `*.csv`, `*.joblib` is not ignored but `*.onnx/*.tflite/*.pt` are – decide with the team where data and the trained model live. Also agree with Team 3 about overlap with `edge_ai/vision` and `gateway/receiver/vision_worker.py`.
+1. **Cap camera (ESP32-S3):** join the `SmartCap-CAM` Wi-Fi, open `http://192.168.4.1/` once to check the picture, close the tab
+   (the ESP32 serves one client), then run `live_img.py --camera esp32 --eval`. Expect lower accuracy; then capture images with the cap camera and fine-tune.
+2. **Raspberry Pi:** use `export_img_onnx.py` and `onnxruntime` (`cv2.CAP_DSHOW` is Windows-only; Linux uses the default backend). Measure speed on the Pi CPU, not from the GPU table.
+3. **IMU fusion:** add `pitch_deg`, `nodding_score` and `head_down_duration_ms` as extra inputs.
+4. **If you move this into the team repo:** its `.gitignore` ignores `*.csv`, `*.onnx`, `*.pt`, `*.tflite`, `*.mp4`, so models, data and reports will be skipped.
+   Decide with the team where they live. Also agree with Team 3 about overlap with `edge_ai/vision` and `gateway/receiver/vision_worker.py`.

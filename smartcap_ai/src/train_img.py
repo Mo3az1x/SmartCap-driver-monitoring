@@ -228,6 +228,12 @@ def main():
     p.add_argument("--batch", type=int, default=64)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--max-per-class", type=int, default=None, help="limit images per class (quick tests)")
+    p.add_argument("--extra", nargs="*", default=[],
+                   help="folders with YOUR OWN images (class sub-folders). Added to the TRAINING set only")
+    p.add_argument("--extra-repeat", type=int, default=10,
+                   help="how many times each --extra image is repeated per epoch (the public set is much bigger)")
+    p.add_argument("--holdout", nargs="*", default=[],
+                   help="folders with images of ANOTHER person. Never trained on; accuracy is reported at the end")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default=str(ROOT / "reports" / "img"))
     p.add_argument("--models", default=str(ROOT / "models"))
@@ -241,14 +247,52 @@ def main():
     print(f"split {'BY VIDEO' if by_video else 'random'}: train {len(tr)} / val {len(va)} | "
           f"val per class {np.bincount(y[va], minlength=len(classes)).tolist()}")
 
+    if args.extra:                                   # your own images: appended, used for TRAINING only
+        parts_x, parts_y = [X], [y]
+        n_extra = 0
+        for folder in args.extra:
+            xe, ye, _, _ = im.load_folder(folder, args.img, args.gray, classes=classes, verbose=False)
+            parts_x.append(xe)
+            parts_y.append(ye)
+            n_extra += len(xe)
+        first = len(X)
+        X, y = np.concatenate(parts_x), np.concatenate(parts_y)
+        extra_idx = np.arange(first, len(X))
+        tr = np.concatenate([tr] + [extra_idx] * max(args.extra_repeat, 1))
+        print(f"+ {n_extra} own images added to TRAINING (each repeated {args.extra_repeat}x per epoch); "
+              f"validation is unchanged")
+    holdout = None
+    if args.holdout:
+        hx, hy = [], []
+        for folder in args.holdout:
+            xh, yh, _, _ = im.load_folder(folder, args.img, args.gray, classes=classes, verbose=False)
+            hx.append(xh)
+            hy.append(yh)
+        holdout = (np.concatenate(hx), np.concatenate(hy))
+        print(f"holdout (never trained on): {len(holdout[0])} images, per class {np.bincount(holdout[1], minlength=len(classes)).tolist()}")
+
     archs = ["ann", "cnn"] if args.arch == "both" else [args.arch]
     results = []
+    hold_lines = []
     for a in archs:
-        r, _ = run_experiment(a, X, y, classes, tr, va, args.img, args.gray, args.epochs, args.batch, args.lr,
-                              args.seed, args.out, args.models)
+        r, model = run_experiment(a, X, y, classes, tr, va, args.img, args.gray, args.epochs, args.batch, args.lr,
+                                  args.seed, args.out, args.models)
         results.append(r)
+        if holdout is not None:
+            from sklearn.metrics import classification_report
+            dev = im.get_device()
+            pred = im.predict_proba(model, holdout[0], dev).argmax(1)
+            acc = float((pred == holdout[1]).mean())
+            r["holdout_acc"] = acc
+            rep = classification_report(holdout[1], pred, labels=range(len(classes)), target_names=classes,
+                                        zero_division=0)
+            print(f"\n{a.upper()} on the HOLDOUT person: accuracy {acc*100:.2f}%\n{rep}")
+            hold_lines.append(f"| {a.upper()} | {acc*100:.2f}% |")
     out = Path(args.out)
     write_report(results, classes, len(tr), len(va), args, out / "img_compare.md", by_video)
+    if hold_lines:
+        with open(out / "img_compare.md", "a", encoding="utf-8") as f:
+            f.write("\n\n## Holdout person (never used in training)\n\n| Model | Accuracy |\n|---|---|\n" + "\n".join(hold_lines) + "\n")
     compare_plot(results, out / "img_compare.png")
     (out / "img_results.json").write_text(json.dumps(results, indent=1), encoding="utf-8")
     print(f"\nReport: {out / 'img_compare.md'}\nPlots:  {out}\nModels: {Path(args.models) / 'img_<arch>.pt'}")
