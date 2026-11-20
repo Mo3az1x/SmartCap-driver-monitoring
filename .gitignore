@@ -238,8 +238,7 @@ venv/
 *.wav
 
 # Model files
-*.pt
-*.pth
+
 *.onnx
 *.tflite
 
