@@ -1,0 +1,37 @@
+part,condition,model,accuracy,microsleep_recall
+P1,none,ANN,0.9007,0.8347
+P1,none,CNN,0.9790,0.9375
+P1,darker x0.4,ANN,0.9007,0.8347
+P1,darker x0.4,CNN,0.9787,0.9355
+P1,darker x0.7,ANN,0.9007,0.8347
+P1,darker x0.7,CNN,0.9773,0.9274
+P1,brighter x1.5,ANN,0.9003,0.8347
+P1,brighter x1.5,CNN,0.9787,0.9355
+P1,blue colour cast,ANN,0.8933,0.7843
+P1,blue colour cast,CNN,0.9747,0.9254
+P1,side light (gradient),ANN,0.8677,0.5020
+P1,side light (gradient),CNN,0.9717,0.9113
+P1,shift 4 px,ANN,0.8523,0.7520
+P1,shift 4 px,CNN,0.9817,0.9194
+P1,zoom in (crop 85%),ANN,0.7563,0.9718
+P1,zoom in (crop 85%),CNN,0.9817,0.9577
+P1,zoom out (face 85%),ANN,0.8400,0.6673
+P1,zoom out (face 85%),CNN,0.9543,0.7560
+P2,none (current),ANN,0.6459,0.0294
+P2,none (current),CNN,0.9443,0.9216
+P2,gray-world (per-channel),ANN,0.6426,0.0294
+P2,gray-world (per-channel),CNN,0.9377,0.9020
+P2,CLAHE contrast,ANN,0.3803,0.0000
+P2,CLAHE contrast,CNN,0.9049,0.7745
+P2,auto-gamma (mean 0.5),ANN,0.6426,0.0098
+P2,auto-gamma (mean 0.5),CNN,0.9443,0.9216
+P2,gray-world + CLAHE,ANN,0.3902,0.0000
+P2,gray-world + CLAHE,CNN,0.9016,0.7745
+P2b,none,ANN,0.6459,0.0294
+P2b,none,CNN,0.9443,0.9216
+P2b,zoom in (crop 85%),ANN,0.3410,0.0490
+P2b,zoom in (crop 85%),CNN,0.9443,0.9510
+P2b,zoom out (face 85%),ANN,0.4689,0.0098
+P2b,zoom out (face 85%),CNN,0.7770,0.4020
+P2b,shift 4 px,ANN,0.5967,0.1275
+P2b,shift 4 px,CNN,0.9311,0.9020

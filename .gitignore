@@ -235,13 +235,10 @@ venv/
 *.avi
 *.mov
 *.mkv
-
 *.wav
 
-
 # Model files
-*.pt
-*.pth
+
 *.onnx
 *.tflite
 
